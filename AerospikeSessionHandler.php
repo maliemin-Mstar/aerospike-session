@@ -22,20 +22,26 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 	}
 
 	public function create_sid() {
+		$bins = array(
+			'placeholder' => 1,
+		);
+		$options = array(
+			Aerospike::OPT_POLICY_EXISTS => Aerospike::POLICY_EXISTS_CREATE,
+		);
 		do{
-			$session_id = mt_rand(0, PHP_INT_MAX);
+			$session_id = mt_rand(0, 0xff) << 56 | mt_rand(0, 0xfffffff) << 28 | mt_rand(0, 0xfffffff);
 			$key = $this->_db->initKey($this->_namespace, $this->_set, $session_id);
-			$metadata = array();
-			$status = $this->_db->exists($key, $metadata);
+			$status = $this->_db->put($key, $bins, $this->_ttl, $options);
 		}
-		while($status === Aerospike::OK);
+		while($status === Aerospike::ERR_RECORD_EXISTS);
 
 		$this->_session_data[$session_id] = '';
 
-		return (string)$session_id;
+		return sprintf('%016x', $session_id);
 	}
 
 	public function destroy($session_id) {
+		$session_id = hexdec(substr($session_id, 0, 8)) << 32 | hexdec(substr($session_id, 8, 8));
 		$key = $this->_db->initKey($this->_namespace, $this->_set, $session_id);
 		$this->_db->remove($key);
 
@@ -51,6 +57,8 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 	}
 
 	public function read($session_id) {
+		$session_id = hexdec(substr($session_id, 0, 8)) << 32 | hexdec(substr($session_id, 8, 8));
+
 		if (isset($this->_session_data[$session_id]))
 			return $this->_session_data[$session_id];
 
@@ -64,6 +72,7 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 	}
 
 	public function write($session_id, $session_data) {
+		$session_id = hexdec(substr($session_id, 0, 8)) << 32 | hexdec(substr($session_id, 8, 8));
 		$key = $this->_db->initKey($this->_namespace, $this->_set, $session_id);
 
 		if (isset($this->_session_data[$session_id]) && $this->_session_data[$session_id] === $session_data) {
