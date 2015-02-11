@@ -72,11 +72,14 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 		if ($status === Aerospike::OK) {
 			$session_data_array = $record['bins'];
 		}
-		else {
+		else if ($status === Aerospike::ERR_RECORD_NOT_FOUND) {
 			$session_data_array = array(
 				'created_at' => time(),
 			);
 			$this->_db->put($key, $session_data_array, $this->_ttl);
+		}
+		else {
+			throw new Exception($this->_db->error(), $this->_db->errorno());
 		}
 
 		return $this->_session_data[$session_id] = msgpack_pack($session_data_array);
