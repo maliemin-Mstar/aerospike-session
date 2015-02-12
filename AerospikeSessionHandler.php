@@ -48,7 +48,7 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 		$key = $this->_db->initKey($this->_namespace, $this->_set, $session_id);
 		$status = $this->_db->remove($key);
 
-		if ($status !== Aerospike::OK)
+		if ($status !== Aerospike::OK && $status !== Aerospike::ERR_RECORD_NOT_FOUND)
 			throw new AerospikeException($this->_db->error(), $this->_db->errorno());
 
 		return true;
@@ -64,7 +64,7 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 
 	public function read($session_id) {
 		if (!preg_match('/^[0-9a-f]{16}$/', $session_id))
-			throw new Duoshuo\Exception('不合法的session id', Duoshuo\AerospikeException::MISSING_OR_INVALID_ARGUMENT);
+			throw new Duoshuo\Exception('不合法的session id', Duoshuo\Exception::MISSING_OR_INVALID_ARGUMENT);
 
 		$session_id = hexdec(substr($session_id, 0, 8)) << 32 | hexdec(substr($session_id, 8, 8));
 
