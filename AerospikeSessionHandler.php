@@ -35,6 +35,9 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 		}
 		while($status === Aerospike::ERR_RECORD_EXISTS);
 
+		if ($status !== Aerospike::OK)
+			throw new AerospikeException($this->_db->error(), $this->_db->errorno());
+
 		$this->_session_data[$session_id] = msgpack_pack($bins);
 
 		return sprintf('%016x', $session_id);
@@ -43,7 +46,10 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 	public function destroy($session_id) {
 		$session_id = hexdec(substr($session_id, 0, 8)) << 32 | hexdec(substr($session_id, 8, 8));
 		$key = $this->_db->initKey($this->_namespace, $this->_set, $session_id);
-		$this->_db->remove($key);
+		$status = $this->_db->remove($key);
+
+		if ($status !== Aerospike::OK)
+			throw new AerospikeException($this->_db->error(), $this->_db->errorno());
 
 		return true;
 	}
@@ -58,7 +64,7 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 
 	public function read($session_id) {
 		if (!preg_match('/^[0-9a-f]{16}$/', $session_id))
-			throw new Duoshuo\Exception('不合法的session id', Duoshuo\Exception::MISSING_OR_INVALID_ARGUMENT);
+			throw new Duoshuo\Exception('不合法的session id', Duoshuo\AerospikeException::MISSING_OR_INVALID_ARGUMENT);
 
 		$session_id = hexdec(substr($session_id, 0, 8)) << 32 | hexdec(substr($session_id, 8, 8));
 
@@ -76,10 +82,16 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 			$session_data_array = array(
 				'created_at' => time(),
 			);
-			$this->_db->put($key, $session_data_array, $this->_ttl);
+			$options = array(
+				Aerospike::OPT_POLICY_EXISTS => Aerospike::POLICY_EXISTS_CREATE,
+			);
+			$status = $this->_db->put($key, $session_data_array, $this->_ttl, $options);
+
+			if ($status !== Aerospike::OK)
+				throw new AerospikeException($this->_db->error(), $this->_db->errorno());
 		}
 		else {
-			throw new Exception($this->_db->error(), $this->_db->errorno());
+			throw new AerospikeException($this->_db->error(), $this->_db->errorno());
 		}
 
 		return $this->_session_data[$session_id] = msgpack_pack($session_data_array);
@@ -90,7 +102,10 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 		$key = $this->_db->initKey($this->_namespace, $this->_set, $session_id);
 
 		if (isset($this->_session_data[$session_id]) && $this->_session_data[$session_id] === $session_data) {
-			$this->_db->touch($key, $this->_ttl);
+			$status = $this->_db->touch($key, $this->_ttl);
+
+			if ($status !== Aerospike::OK)
+				throw new AerospikeException($this->_db->error(), $this->_db->errorno());
 		}
 		else {
 			$this->_session_data[$session_id] = $session_data;
@@ -99,7 +114,10 @@ class AerospikeSessionHandler implements \SessionHandlerInterface {
 			$options = array(
 				Aerospike::OPT_POLICY_EXISTS => Aerospike::POLICY_EXISTS_CREATE_OR_REPLACE,
 			);
-			$this->_db->put($key, $bins, $this->_ttl, $options);
+			$status = $this->_db->put($key, $bins, $this->_ttl, $options);
+
+			if ($status !== Aerospike::OK)
+				throw new AerospikeException($this->_db->error(), $this->_db->errorno());
 		}
 
 		return true;
